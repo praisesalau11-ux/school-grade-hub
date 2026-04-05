@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>School App</title>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+<!-- Chart -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script src="firebase.js"></script>
+<script src="classes.js"></script>
+<script src="juniorSubject.js"></script>
+<script src="seniorSubject.js"></script>
+
+<!-- GAME FILES -->
+<script src="maths.js"></script>
+<script src="english.js"></script>
+<script src="history.js"></script>
+<script src="subject.js"></script>
+<script src="general.js"></script>
+
+<style>
+body { font-family: Arial; background:#0f172a; color:white; padding:10px; }
+.page { display:none; }
+.page.active { display:block; }
+
+button {
+  width:100%;
+  padding:12px;
+  margin-top:8px;
+  border:none;
+  border-radius:8px;
+  background:#22c55e;
+  color:white;
+}
+
+.card {
+  background:#1e293b;
+  padding:12px;
+  margin-top:10px;
+  border-radius:10px;
+}
+
+input, select {
+  width:100%;
+  padding:10px;
+  margin-top:5px;
+  border-radius:6px;
+  border:none;
+}
+
+.bottom-nav {
+  position:fixed;
+  bottom:0;
+  width:100%;
+  display:flex;
+  background:#020617;
+}
+.bottom-nav button { flex:1; background:none; }
+</style>
+</head>
+
+<body>
+
+<!-- GRADES -->
+<div id="gradesPage" class="page active">
+  <h2>📊 Grades Calculator</h2>
+
+  <select id="classSelect" onchange="loadSubjects()"></select>
+
+  <div id="departmentBox" style="display:none;">
+    <select id="departmentSelect" onchange="loadSubjects()">
+      <option value="">Select Department</option>
+      <option>Science</option>
+      <option>Art</option>
+      <option>Commercial</option>
+    </select>
+  </div>
+
+  <div id="subjectsBox"></div>
+
+  <button onclick="calculateGrades()">Calculate</button>
+
+  <div id="resultBox" class="card"></div>
+  <canvas id="chart"></canvas>
+</div>
+
+<!-- HISTORY -->
+<div id="historyPage" class="page">
+  <h2>📜 History</h2>
+  <div id="historyBox"></div>
+</div>
+
+<!-- PROFILE -->
+<div id="profilePage" class="page">
+  <h2>👤 Profile</h2>
+  <div id="profileBox"></div>
+</div>
+
+<!-- LEADERBOARD -->
+<div id="leaderboardPage" class="page">
+  <h2>🏆 Leaderboard</h2>
+  <div id="leaderboardBox"></div>
+</div>
+
+<!-- GAME -->
+<div id="gamePage" class="page">
+  <h2>🎮 Game</h2>
+
+  <button onclick="startGame()">Start Game</button>
+
+  <div id="gameBox" class="card"></div>
+  <p>Time: <span id="timer">20</span></p>
+</div>
+
+<!-- NAV -->
+<div class="bottom-nav">
+  <button onclick="goPage('gradesPage')">Grades</button>
+  <button onclick="goPage('historyPage')">History</button>
+  <button onclick="goPage('profilePage')">Profile</button>
+  <button onclick="goPage('leaderboardPage')">Leaderboard</button>
+  <button onclick="goPage('gamePage')">Game</button>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

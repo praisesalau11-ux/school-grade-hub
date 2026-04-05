@@ -1,0 +1,178 @@
+/* RESET */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: Arial;
+}
+
+body {
+  background: #0f172a;
+  color: white;
+}
+
+/* LAYOUT */
+.layout {
+  display: flex;
+  height: 100vh;
+}
+
+/* SIDEBAR */
+.sidebar {
+  width: 200px;
+  background: #020617;
+  padding: 15px;
+}
+
+.sidebar h2 {
+  margin-bottom: 20px;
+}
+
+.sidebar button {
+  width: 100%;
+  margin: 8px 0;
+  padding: 10px;
+  background: #1e293b;
+  border: none;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sidebar button:hover {
+  background: #334155;
+}
+
+/* MAIN */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* TOPBAR */
+.topbar {
+  padding: 15px;
+  background: #020617;
+  border-bottom: 1px solid #334155;
+}
+
+/* VIEWPORT */
+.viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* PAGES */
+.page {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  padding: 15px;
+  transform: translateX(100%);
+  transition: 0.3s ease;
+  opacity: 0;
+}
+
+.page.active {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+/* CARD */
+.card {
+  background: #1e293b;
+  padding: 15px;
+  border-radius: 12px;
+}
+
+/* BUTTON */
+.btn {
+  margin-top: 10px;
+  padding: 10px;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: #22c55e;
+  color: white;
+  cursor: pointer;
+}
+
+/* AVATAR */
+.avatar-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+}
+
+/* SETTINGS */
+.hidden {
+  display: none;
+}
+
+#settingsPanel button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  background: #334155;
+  border: none;
+  color: white;
+  border-radius: 6px;
+}
+
+/* BADGE */
+.badge {
+  background: red;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 50%;
+  font-size: 10px;
+  margin-left: 5px;
+}
+
+/* BOTTOM NAV */
+.bottom-nav {
+  display: flex;
+  justify-content: space-around;
+  background: #020617;
+  padding: 10px;
+  border-top: 1px solid #334155;
+}
+
+.bottom-nav button {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.bottom-nav button span {
+  display: block;
+}
+
+.bottom-nav button.active {
+  color: #22c55e;
+}
+
+/* LIGHT THEME */
+.light-theme {
+  background: #f1f5f9;
+  color: black;
+}
+
+.light-theme .card,
+.light-theme .sidebar,
+.light-theme .topbar,
+.light-theme .bottom-nav {
+  background: white;
+  color: black;
+}

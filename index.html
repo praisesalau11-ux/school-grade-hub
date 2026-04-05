@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>School Grade Hub</title>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+<!-- Your Firebase Config -->
+<script src="firebase.js"></script>
+
+<!-- Data loaders -->
+<script src="gender.js"></script>
+<script src="class.js"></script>
+
+<style>
+body { font-family: Arial; background:#0f172a; color:#fff; display:flex; justify-content:center; align-items:center; height:100vh; }
+.container { background:#1e293b; padding:20px; border-radius:10px; width:320px; }
+input, select { width:100%; padding:10px; margin:5px 0; border:none; border-radius:5px; }
+button { width:100%; padding:10px; margin-top:10px; border:none; border-radius:5px; background:#22c55e; color:#fff; cursor:pointer; }
+button:hover { background:#16a34a; }
+.hidden { display:none; }
+#toast { position:fixed; top:20px; right:20px; background:#22c55e; padding:10px; border-radius:5px; display:none; }
+</style>
+</head>
+
+<body>
+
+<div id="toast"></div>
+
+<div class="container">
+
+<h2 id="title">Sign Up</h2>
+
+<!-- SIGNUP -->
+<div id="signupForm">
+<input id="firstName" placeholder="First Name">
+<input id="lastName" placeholder="Last Name">
+<input id="email" placeholder="Email">
+<input id="password" type="password" placeholder="Password">
+<input id="confirmPassword" type="password" placeholder="Confirm Password">
+<input id="phone" placeholder="Phone Number">
+<input type="date" id="dob">
+
+<select id="genderSelect"></select>
+<select id="classSelect"></select>
+
+<button onclick="signup()">Sign Up</button>
+<button onclick="showLogin()">Already have account? Login</button>
+</div>
+
+<!-- LOGIN -->
+<div id="loginForm" class="hidden">
+<input id="loginEmail" placeholder="Email">
+<input id="loginPassword" type="password" placeholder="Password">
+
+<button onclick="login()">Login</button>
+<button onclick="showSignup()">Back to Signup</button>
+</div>
+
+</div>
+
+<script src="index.js"></script>
+
+<script>
+/* Load dropdowns */
+loadGenders("genderSelect");
+loadClasses("classSelect");
+</script>
+
+</body>
+</html>

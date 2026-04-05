@@ -1,0 +1,22 @@
+const juniorSubjects = [
+  "Mathematics",
+  "English Language",
+  "Basic Science",
+  "Basic Technology",
+  "Social Studies",
+  "Civic Education",
+  "Computer Studies",
+  "Physical & Health Education",
+  "Agricultural Science",
+  "Business Studies",
+  "Creative Arts",
+  "Home Economics",
+  "French",
+  "Christian Religious Studies",
+  "Islamic Religious Studies",
+  "Yoruba",
+  "Igbo",
+  "Hausa",
+  "Music",
+  "History"
+];
