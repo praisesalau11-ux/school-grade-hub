@@ -17,6 +17,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   classSelect.innerHTML = [...juniorClasses, ...seniorClasses]
     .map(c=>`<option>${c}</option>`).join("");
+
+  initStreak(); // ✅ streak system init
 });
 
 // ================= NAV =================
@@ -76,6 +78,16 @@ function renderSubjects(subjects){
   });
 }
 
+// ================= GRADE SYSTEM =================
+function getGrade(percent){
+  if(percent >= 80) return "A";
+  if(percent >= 70) return "B";
+  if(percent >= 60) return "C";
+  if(percent >= 50) return "D";
+  if(percent >= 40) return "E";
+  return "F";
+}
+
 // ================= GRADES =================
 function calculateGrades(){
   const inputs = document.querySelectorAll(".score");
@@ -91,19 +103,22 @@ function calculateGrades(){
 
   let avg = total / inputs.length;
   let gpa = (avg/100)*5;
+  let grade = getGrade(avg);
 
   let weak = labels.filter((s,i)=>scores[i]<50);
 
   document.getElementById("resultBox").innerHTML = `
     <p>Percentage: ${avg.toFixed(2)}%</p>
     <p>GPA: ${gpa.toFixed(2)}</p>
+    <p>Grade: ${grade}</p>
     <p>Weak Subjects: ${weak.join(", ")||"None"}</p>
   `;
 
   notify("Result calculated 🔥");
 
   drawChart(labels,scores);
-  saveHistory({scores,avg,gpa});
+
+  saveHistory({scores,avg,gpa,grade});
 }
 
 // ================= CHART =================
@@ -112,7 +127,13 @@ function drawChart(labels,data){
 
   chartInstance = new Chart(document.getElementById("chart"),{
     type:"bar",
-    data:{labels,datasets:[{data}]}
+    data:{
+      labels,
+      datasets:[{
+        label:"Scores",
+        data
+      }]
+    }
   });
 }
 
@@ -147,20 +168,56 @@ function getLevel(xp){
   return "Beginner";
 }
 
-// ================= GAME SYSTEM (GLOBAL NO-REPEAT PRO) =================
+// ================= 🔥 STREAK SYSTEM =================
+function initStreak(){
+  const today = new Date().toDateString();
+  let last = localStorage.getItem("lastLoginDate");
+  let streak = parseInt(localStorage.getItem("streak")) || 0;
 
-// Combine ALL question sources INCLUDING subject.js
+  if(last === today){
+    return;
+  }
+
+  let yesterday = new Date();
+  yesterday.setDate(yesterday.getDate()-1);
+
+  if(last === yesterday.toDateString()){
+    streak++;
+  } else {
+    streak = 1;
+  }
+
+  localStorage.setItem("streak", streak);
+  localStorage.setItem("lastLoginDate", today);
+
+  notify(`🔥 Streak: ${streak} days`);
+
+  giveStreakReward(streak);
+}
+
+// Weekly reward
+async function giveStreakReward(streak){
+  let bonus = 0;
+
+  if(streak % 7 === 0){
+    bonus = 50;
+    notify("🎁 Weekly streak reward +50 XP");
+  } else {
+    bonus = 10;
+  }
+
+  await addXP(bonus);
+}
+
+// ================= GAME SYSTEM =================
 let ALL_QUESTIONS = [
-  ...(MATH_QUESTIONS || []),
-  ...(ENGLISH_QUESTIONS || []),
-  ...(HISTORY_QUESTIONS || []),
-  ...(GENERAL_QUESTIONS || []),
-  ...(SUBJECT_QUESTIONS || []) // from subject.js
+  ...MATH_QUESTIONS,
+  ...ENGLISH_QUESTIONS,
+  ...HISTORY_QUESTIONS,
+  ...GENERAL_QUESTIONS
 ];
 
-// Use Set of question IDs instead of index (more reliable)
-let usedQuestions = new Set();
-
+let usedIndexes = new Set();
 let currentQ = null;
 let timer;
 let timeLeft = 20;
@@ -171,33 +228,30 @@ let score = 0;
 
 // START GAME
 function startGame(){
-  usedQuestions.clear();
+  usedIndexes.clear();
   gameCount = 0;
   score = 0;
 
   gameTotal = Math.floor(Math.random() * 41) + 10;
 
-  notify(`Game started 🎮 (${gameTotal} questions)`);
+  notify(`Game started 🎮 (${gameTotal})`);
 
   nextQuestion();
 }
 
-// GET UNIQUE QUESTION (NO REPEAT GLOBAL)
+// UNIQUE QUESTION
 function getUniqueQuestion(){
-
-  if(usedQuestions.size >= ALL_QUESTIONS.length){
-    usedQuestions.clear(); // reset if exhausted
+  if(usedIndexes.size >= ALL_QUESTIONS.length){
+    usedIndexes.clear();
   }
 
-  let q;
+  let index;
+  do{
+    index = Math.floor(Math.random() * ALL_QUESTIONS.length);
+  }while(usedIndexes.has(index));
 
-  do {
-    q = ALL_QUESTIONS[Math.floor(Math.random() * ALL_QUESTIONS.length)];
-  } while(usedQuestions.has(q.id));
-
-  usedQuestions.add(q.id);
-
-  return q;
+  usedIndexes.add(index);
+  return ALL_QUESTIONS[index];
 }
 
 // NEXT QUESTION
@@ -213,28 +267,21 @@ function nextQuestion(){
   gameCount++;
 
   renderQuestion(currentQ);
-
   startTimer();
 }
 
-// RENDER QUESTION
+// RENDER
 function renderQuestion(q){
-
-  if(q.options && q.options.length > 0){
-
-    let optionsHTML = q.options.map(opt=>`
+  if(q.options){
+    let html = q.options.map(opt=>`
       <button onclick="checkGameAnswer('${opt}')">${opt}</button>
     `).join("");
 
+    gameBox.innerHTML = `<h3>${q.q}</h3>${html}`;
+  } else {
     gameBox.innerHTML = `
       <h3>${q.q}</h3>
-      ${optionsHTML}
-    `;
-  }
-  else{
-    gameBox.innerHTML = `
-      <h3>${q.q}</h3>
-      <input id="ansInput" placeholder="Enter answer">
+      <input id="ansInput">
       <button onclick="checkGameAnswer()">Submit</button>
     `;
   }
@@ -249,43 +296,43 @@ function startTimer(){
     timeLeft--;
     document.getElementById("timer").innerText = timeLeft;
 
-    if(timeLeft <= 0){
-      notify(`⏰ Time up! Correct: ${currentQ.a}`);
+    if(timeLeft<=0){
+      notify(`⏰ Time up! Answer: ${currentQ.a}`);
       nextQuestion();
     }
   },1000);
 }
 
-// CHECK ANSWER
+// CHECK
 async function checkGameAnswer(selected=null){
-
   clearInterval(timer);
 
-  let userAnswer = selected ?? document.getElementById("ansInput")?.value;
+  let userAnswer = selected !== null
+    ? selected
+    : document.getElementById("ansInput")?.value;
 
   if(userAnswer == currentQ.a){
     score++;
-    notify(`✅ Correct! Answer: ${currentQ.a}`);
+    notify("✅ Correct");
   } else {
-    notify(`❌ Wrong! Correct: ${currentQ.a}`);
+    notify(`❌ Wrong: ${currentQ.a}`);
   }
 
-  setTimeout(nextQuestion, 800);
+  setTimeout(nextQuestion,1000);
 }
 
 // END GAME
 async function endGame(){
 
-  let xpEarned = 10;
+  let xpEarned = score * 2;
 
-  notify(`🎉 Finished! Score: ${score}/${gameTotal}`);
+  notify(`🎉 ${score}/${gameTotal} (+${xpEarned} XP)`);
 
   await addXP(xpEarned);
 
   gameBox.innerHTML = `
-    <h3>Game Finished</h3>
-    <p>Score: ${score} / ${gameTotal}</p>
-    <p>XP Earned: ${xpEarned}</p>
+    <h3>Finished</h3>
+    <p>Score: ${score}/${gameTotal}</p>
   `;
 }
 
@@ -310,7 +357,13 @@ function loadHistory(){
     let html="";
     snap.forEach(doc=>{
       let d=doc.data();
-      html+=`<div class="card">${d.gpa.toFixed(2)} GPA</div>`;
+      html+=`
+        <div class="card">
+          GPA: ${d.gpa.toFixed(2)}<br>
+          %: ${d.avg.toFixed(2)}<br>
+          Grade: ${d.grade}
+        </div>
+      `;
     });
     historyBox.innerHTML=html;
   });
@@ -323,13 +376,14 @@ async function loadProfile(){
   const d = doc.data();
 
   let level = getLevel(d.xp || 0);
+  let streak = localStorage.getItem("streak") || 0;
 
   profileBox.innerHTML = `
     <div class="card">
       ${d.firstName} ${d.lastName}<br>
-      ${d.email}<br>
       XP: ${d.xp || 0}<br>
-      Level: ${level}
+      Level: ${level}<br>
+      🔥 Streak: ${streak}
     </div>
   `;
 }
@@ -341,14 +395,24 @@ function loadLeaderboard(){
   .limit(20)
   .onSnapshot(snap=>{
     let html="";
+    let rank=1;
+
     snap.forEach(doc=>{
       let d=doc.data();
+
+      let medal = "";
+      if(rank===1) medal="🥇";
+      else if(rank===2) medal="🥈";
+      else if(rank===3) medal="🥉";
+
       html+=`
         <div class="card">
-          ${d.firstName} ${d.lastName} - XP: ${d.xp || 0}
+          ${medal} ${rank}. ${d.firstName} ${d.lastName} - XP: ${d.xp || 0}
         </div>
       `;
+      rank++;
     });
+
     leaderboardBox.innerHTML=html;
   });
 }
