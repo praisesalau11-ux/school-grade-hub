@@ -1,418 +1,754 @@
-// ================= ELEMENTS =================
-let classSelect, departmentSelect;
-let historyBox, profileBox, gameBox, leaderboardBox;
+import { auth, db } from "./firebase.js";
 
-let chartInstance = null;
+import {
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-// ================= INIT =================
-document.addEventListener("DOMContentLoaded", () => {
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  orderBy,
+  limit
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  classSelect = document.getElementById("classSelect");
-  departmentSelect = document.getElementById("departmentSelect");
+// ================= CONFIG =================
+const SERVER =
+  window.location.hostname === "localhost"
+    ? "http://localhost:3000"
+    : "https://auralis-ai-6dnq.onrender.com";
 
-  historyBox = document.getElementById("historyBox");
-  profileBox = document.getElementById("profileBox");
-  gameBox = document.getElementById("gameBox");
-  leaderboardBox = document.getElementById("leaderboardBox");
+// ================= STATE =================
+let currentUser = null;
+let currentChatId = null;
 
-  classSelect.innerHTML = [...juniorClasses, ...seniorClasses]
-    .map(c=>`<option>${c}</option>`).join("");
+let voiceMode = localStorage.getItem("voice") || "random";
 
-  initStreak(); // ✅ streak system init
+const cache = new Map();
+
+let memoryCache = "";
+let memoryTime = 0;
+
+let recognition = null;
+let isRecording = false;
+
+let dailyStats = JSON.parse(
+  localStorage.getItem("stats") || "{}"
+);
+
+// ================= UI =================
+const chatBox = document.getElementById("chatBox");
+const textInput = document.getElementById("textInput");
+const status = document.getElementById("status");
+const historyList = document.getElementById("historyList");
+const analyticsBox = document.getElementById("analyticsBox");
+const fileInput = document.getElementById("fileInput");
+
+let uploadedFile = null;
+
+window.pickFile = () => {
+  fileInput.click();
+};
+
+window.takePhoto = () => {
+  fileInput.accept = "image/*";
+  fileInput.capture = "environment";
+  fileInput.click();
+};
+
+fileInput.addEventListener("change", async e => {
+
+  const file = e.target.files[0];
+
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = () => {
+
+    uploadedFile = {
+      name: file.name,
+      type: file.type,
+      data: reader.result
+    };
+
+    render(
+      "user",
+      "📎 " + file.name
+    );
+
+  };
+
+  reader.readAsDataURL(file);
+
 });
 
 // ================= NAV =================
-function goPage(id){
-  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
+window.openTab = function (tab) {
 
-  if(id==="profilePage") loadProfile();
-  if(id==="historyPage") loadHistory();
-  if(id==="leaderboardPage") loadLeaderboard();
-}
+  document.querySelectorAll(".page").forEach(page => {
+    page.classList.add("hidden");
+  });
 
-// ================= NOTIFY =================
-function notify(msg){
-  const div = document.createElement("div");
-  div.innerText = msg;
-  div.style.position="fixed";
-  div.style.top="10px";
-  div.style.right="10px";
-  div.style.background="#22c55e";
-  div.style.padding="10px";
-  document.body.appendChild(div);
-  setTimeout(()=>div.remove(),3000);
-}
+  document.getElementById(tab).classList.remove("hidden");
 
-// ================= SUBJECT =================
-function loadSubjects(){
-  const cls = classSelect.value;
-  const deptBox = document.getElementById("departmentBox");
-
-  let subjects = [];
-
-  if(isJunior(cls)){
-    deptBox.style.display="none";
-    subjects = juniorSubjects;
+  if (tab === "analytics") {
+    loadAnalytics();
   }
+};
 
-  if(isSenior(cls)){
-    deptBox.style.display="block";
-    subjects = getSeniorSubjects(departmentSelect.value);
-  }
+// ================= AUTH =================
+onAuthStateChanged(auth, async (user) => {
 
-  renderSubjects(subjects);
-}
-
-function renderSubjects(subjects){
-  const box = document.getElementById("subjectsBox");
-  box.innerHTML="";
-
-  subjects.forEach(sub=>{
-    box.innerHTML += `
-      <div class="card">
-        <label>${sub}</label>
-        <input type="number" class="score" data-sub="${sub}">
-      </div>
-    `;
-  });
-}
-
-// ================= GRADE SYSTEM =================
-function getGrade(percent){
-  if(percent >= 80) return "A";
-  if(percent >= 70) return "B";
-  if(percent >= 60) return "C";
-  if(percent >= 50) return "D";
-  if(percent >= 40) return "E";
-  return "F";
-}
-
-// ================= GRADES =================
-function calculateGrades(){
-  const inputs = document.querySelectorAll(".score");
-
-  let scores=[], labels=[], total=0;
-
-  inputs.forEach(i=>{
-    let val = parseFloat(i.value)||0;
-    scores.push(val);
-    labels.push(i.dataset.sub);
-    total+=val;
-  });
-
-  let avg = total / inputs.length;
-  let gpa = (avg/100)*5;
-  let grade = getGrade(avg);
-
-  let weak = labels.filter((s,i)=>scores[i]<50);
-
-  document.getElementById("resultBox").innerHTML = `
-    <p>Percentage: ${avg.toFixed(2)}%</p>
-    <p>GPA: ${gpa.toFixed(2)}</p>
-    <p>Grade: ${grade}</p>
-    <p>Weak Subjects: ${weak.join(", ")||"None"}</p>
-  `;
-
-  notify("Result calculated 🔥");
-
-  drawChart(labels,scores);
-
-  saveHistory({scores,avg,gpa,grade});
-}
-
-// ================= CHART =================
-function drawChart(labels,data){
-  if(chartInstance) chartInstance.destroy();
-
-  chartInstance = new Chart(document.getElementById("chart"),{
-    type:"bar",
-    data:{
-      labels,
-      datasets:[{
-        label:"Scores",
-        data
-      }]
-    }
-  });
-}
-
-// ================= XP =================
-async function addXP(amount){
-  const user = auth.currentUser;
-  if(!user) return;
-
-  const ref = db.collection("users").doc(user.uid);
-  const doc = await ref.get();
-
-  let xp = doc.data().xp || 0;
-  xp += amount;
-
-  await ref.update({ xp });
-}
-
-// ================= LEVEL =================
-function getLevel(xp){
-  if(xp>=100000) return "Verified";
-  if(xp>=80000) return "Fam";
-  if(xp>=75000) return "Diamond";
-  if(xp>=55000) return "Platinum";
-  if(xp>=50000) return "Silver";
-  if(xp>=40000) return "Gold";
-  if(xp>=35000) return "Leader";
-  if(xp>=20000) return "Master";
-  if(xp>=10000) return "Elite";
-  if(xp>=5000) return "Expert";
-  if(xp>=2500) return "Trained";
-  if(xp>=1000) return "Starter";
-  return "Beginner";
-}
-
-// ================= 🔥 STREAK SYSTEM =================
-function initStreak(){
-  const today = new Date().toDateString();
-  let last = localStorage.getItem("lastLoginDate");
-  let streak = parseInt(localStorage.getItem("streak")) || 0;
-
-  if(last === today){
+  if (!user) {
+    window.location.href = "auth.html#login";
     return;
   }
 
-  let yesterday = new Date();
-  yesterday.setDate(yesterday.getDate()-1);
+  currentUser = user;
 
-  if(last === yesterday.toDateString()){
-    streak++;
-  } else {
-    streak = 1;
+  document.getElementById("userInfo").innerText = user.email;
+
+  try {
+    await loadChats();
+    await getMemory();
+  } catch (err) {
+    console.log(err);
+  }
+});
+
+// ================= MEMORY =================
+async function getMemory() {
+
+  const now = Date.now();
+
+  if (memoryCache && now - memoryTime < 20000) {
+    return memoryCache;
   }
 
-  localStorage.setItem("streak", streak);
-  localStorage.setItem("lastLoginDate", today);
+  try {
 
-  notify(`🔥 Streak: ${streak} days`);
+    const q = query(
+      collection(db, "users", currentUser.uid, "history"),
+      orderBy("createdAt", "desc"),
+      limit(5)
+    );
 
-  giveStreakReward(streak);
-}
+    const snap = await getDocs(q);
 
-// Weekly reward
-async function giveStreakReward(streak){
-  let bonus = 0;
+    let mem = "";
 
-  if(streak % 7 === 0){
-    bonus = 50;
-    notify("🎁 Weekly streak reward +50 XP");
-  } else {
-    bonus = 10;
-  }
+    snap.forEach(doc => {
 
-  await addXP(bonus);
-}
+      const data = doc.data();
 
-// ================= GAME SYSTEM =================
-let ALL_QUESTIONS = [
-  ...MATH_QUESTIONS,
-  ...ENGLISH_QUESTIONS,
-  ...HISTORY_QUESTIONS,
-  ...GENERAL_QUESTIONS
-];
-
-let usedIndexes = new Set();
-let currentQ = null;
-let timer;
-let timeLeft = 20;
-
-let gameTotal = 0;
-let gameCount = 0;
-let score = 0;
-
-// START GAME
-function startGame(){
-  usedIndexes.clear();
-  gameCount = 0;
-  score = 0;
-
-  gameTotal = Math.floor(Math.random() * 41) + 10;
-
-  notify(`Game started 🎮 (${gameTotal})`);
-
-  nextQuestion();
-}
-
-// UNIQUE QUESTION
-function getUniqueQuestion(){
-  if(usedIndexes.size >= ALL_QUESTIONS.length){
-    usedIndexes.clear();
-  }
-
-  let index;
-  do{
-    index = Math.floor(Math.random() * ALL_QUESTIONS.length);
-  }while(usedIndexes.has(index));
-
-  usedIndexes.add(index);
-  return ALL_QUESTIONS[index];
-}
-
-// NEXT QUESTION
-function nextQuestion(){
-  clearInterval(timer);
-
-  if(gameCount >= gameTotal){
-    endGame();
-    return;
-  }
-
-  currentQ = getUniqueQuestion();
-  gameCount++;
-
-  renderQuestion(currentQ);
-  startTimer();
-}
-
-// RENDER
-function renderQuestion(q){
-  if(q.options){
-    let html = q.options.map(opt=>`
-      <button onclick="checkGameAnswer('${opt}')">${opt}</button>
-    `).join("");
-
-    gameBox.innerHTML = `<h3>${q.q}</h3>${html}`;
-  } else {
-    gameBox.innerHTML = `
-      <h3>${q.q}</h3>
-      <input id="ansInput">
-      <button onclick="checkGameAnswer()">Submit</button>
-    `;
-  }
-}
-
-// TIMER
-function startTimer(){
-  timeLeft = 20;
-  document.getElementById("timer").innerText = timeLeft;
-
-  timer = setInterval(()=>{
-    timeLeft--;
-    document.getElementById("timer").innerText = timeLeft;
-
-    if(timeLeft<=0){
-      notify(`⏰ Time up! Answer: ${currentQ.a}`);
-      nextQuestion();
-    }
-  },1000);
-}
-
-// CHECK
-async function checkGameAnswer(selected=null){
-  clearInterval(timer);
-
-  let userAnswer = selected !== null
-    ? selected
-    : document.getElementById("ansInput")?.value;
-
-  if(userAnswer == currentQ.a){
-    score++;
-    notify("✅ Correct");
-  } else {
-    notify(`❌ Wrong: ${currentQ.a}`);
-  }
-
-  setTimeout(nextQuestion,1000);
-}
-
-// END GAME
-async function endGame(){
-
-  let xpEarned = score * 2;
-
-  notify(`🎉 ${score}/${gameTotal} (+${xpEarned} XP)`);
-
-  await addXP(xpEarned);
-
-  gameBox.innerHTML = `
-    <h3>Finished</h3>
-    <p>Score: ${score}/${gameTotal}</p>
-  `;
-}
-
-// ================= HISTORY =================
-async function saveHistory(data){
-  const user = auth.currentUser;
-  if(!user) return;
-
-  await db.collection("history").add({
-    uid:user.uid,
-    ...data,
-    time:new Date()
-  });
-}
-
-function loadHistory(){
-  const user = auth.currentUser;
-
-  db.collection("history")
-  .where("uid","==",user.uid)
-  .onSnapshot(snap=>{
-    let html="";
-    snap.forEach(doc=>{
-      let d=doc.data();
-      html+=`
-        <div class="card">
-          GPA: ${d.gpa.toFixed(2)}<br>
-          %: ${d.avg.toFixed(2)}<br>
-          Grade: ${d.grade}
-        </div>
-      `;
+      mem += `
+User: ${data.user}
+AI: ${data.ai}
+`;
     });
-    historyBox.innerHTML=html;
-  });
+
+    memoryCache = mem;
+    memoryTime = now;
+
+    return mem;
+
+  } catch (err) {
+    console.log("MEMORY ERROR:", err);
+    return "";
+  }
 }
 
 // ================= PROFILE =================
-async function loadProfile(){
-  const user = auth.currentUser;
-  const doc = await db.collection("users").doc(user.uid).get();
-  const d = doc.data();
+function getProfile() {
 
-  let level = getLevel(d.xp || 0);
-  let streak = localStorage.getItem("streak") || 0;
-
-  profileBox.innerHTML = `
-    <div class="card">
-      ${d.firstName} ${d.lastName}<br>
-      XP: ${d.xp || 0}<br>
-      Level: ${level}<br>
-      🔥 Streak: ${streak}
-    </div>
-  `;
+  return JSON.parse(
+    localStorage.getItem("profile_" + currentUser.uid) || "{}"
+  );
 }
 
-// ================= LEADERBOARD =================
-function loadLeaderboard(){
-  db.collection("users")
-  .orderBy("xp","desc")
-  .limit(20)
-  .onSnapshot(snap=>{
-    let html="";
-    let rank=1;
+function updateProfile(message) {
 
-    snap.forEach(doc=>{
-      let d=doc.data();
+  const profile = getProfile();
 
-      let medal = "";
-      if(rank===1) medal="🥇";
-      else if(rank===2) medal="🥈";
-      else if(rank===3) medal="🥉";
+  const lower = message.toLowerCase();
 
-      html+=`
-        <div class="card">
-          ${medal} ${rank}. ${d.firstName} ${d.lastName} - XP: ${d.xp || 0}
-        </div>
-      `;
-      rank++;
+  if (lower.includes("my name is")) {
+
+    profile.name =
+      message.split("my name is")[1]?.trim() || profile.name;
+  }
+
+  if (lower.includes("i like")) {
+
+    profile.likes = profile.likes || [];
+
+    const like =
+      message.split("I like")[1]?.trim();
+
+    if (like) {
+      profile.likes.push(like);
+    }
+  }
+
+  localStorage.setItem(
+    "profile_" + currentUser.uid,
+    JSON.stringify(profile)
+  );
+}
+
+// ================= RENDER =================
+function render(role, text) {
+
+  const div = document.createElement("div");
+
+  div.className = `msg ${role}`;
+
+  div.textContent = text;
+
+  chatBox.appendChild(div);
+
+  requestAnimationFrame(() => {
+    chatBox.scrollTop = chatBox.scrollHeight;
+  });
+
+  return div;
+}
+
+// ================= SOUND =================
+let lastSound = 0;
+
+const keySound = new Audio(
+  "https://www.soundjay.com/keyboard/keyboard-1.mp3"
+);
+
+keySound.volume = 0.03;
+
+function playSound() {
+
+  const now = Date.now();
+
+  if (now - lastSound < 120) return;
+
+  lastSound = now;
+
+  try {
+    keySound.currentTime = 0;
+    keySound.play().catch(() => {});
+  } catch {}
+}
+
+// ================= VOICE =================
+function getVoicesSafe() {
+
+  return new Promise(resolve => {
+
+    let voices = speechSynthesis.getVoices();
+
+    if (voices.length) {
+      resolve(voices);
+      return;
+    }
+
+    speechSynthesis.onvoiceschanged = () => {
+      voices = speechSynthesis.getVoices();
+      resolve(voices);
+    };
+  });
+}
+
+// ================= SPEAK =================
+async function speak(text) {
+
+  try {
+
+    const voices = await getVoicesSafe();
+
+    const utter = new SpeechSynthesisUtterance(text);
+
+    if (voiceMode === "random") {
+
+      utter.voice =
+        voices[Math.floor(Math.random() * voices.length)];
+
+    } else if (voiceMode === "female") {
+
+      utter.voice =
+        voices.find(v =>
+          v.name.toLowerCase().includes("female")
+        ) || voices[0];
+
+    } else if (voiceMode === "male") {
+
+      utter.voice =
+        voices.find(v =>
+          v.name.toLowerCase().includes("male")
+        ) || voices[0];
+    }
+
+    utter.rate = 1;
+    utter.pitch = 1;
+
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utter);
+
+  } catch (err) {
+    console.log(err);
+  }
+}
+
+// ================= REAL VOICE INPUT =================
+if ("webkitSpeechRecognition" in window) {
+
+  recognition = new webkitSpeechRecognition();
+
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = "en-US";
+
+  recognition.onstart = () => {
+
+    isRecording = true;
+
+    status.textContent = "🎤 Listening...";
+  };
+
+  recognition.onend = () => {
+
+    isRecording = false;
+
+    status.textContent = "";
+  };
+
+  recognition.onerror = (event) => {
+
+    console.log(event.error);
+
+    status.textContent = "Mic error";
+  };
+
+  recognition.onresult = (event) => {
+
+    let transcript = "";
+
+    for (
+      let i = event.resultIndex;
+      i < event.results.length;
+      i++
+    ) {
+
+      transcript += event.results[i][0].transcript;
+    }
+
+    textInput.value = transcript;
+
+    const final =
+      event.results[event.results.length - 1].isFinal;
+
+    if (final) {
+      sendMessage();
+    }
+  };
+}
+
+// ================= MIC =================
+window.startHoldRecord = function () {
+
+  if (!recognition || isRecording) return;
+
+  recognition.start();
+};
+
+window.stopHoldRecord = function () {
+
+  if (!recognition || !isRecording) return;
+
+  recognition.stop();
+};
+
+// ================= AI =================
+async function askAI(message, box) {
+
+  const key = message.toLowerCase();
+
+  if (cache.has(key)) {
+
+    const cached = cache.get(key);
+
+    box.textContent = cached;
+
+    return cached;
+  }
+
+  const memory = await getMemory();
+
+  const profile = getProfile();
+
+  try {
+
+    const res = await fetch(`${SERVER}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+    message,
+    memory,
+   profile,
+   email: currentUser.email,
+   file: uploadedFile
+   })
     });
 
-    leaderboardBox.innerHTML=html;
+    // ================= FIXED ERROR HANDLER =================
+    if (!res.ok) {
+
+      const errText = await res.text();
+
+      console.log("SERVER ERROR:", errText);
+
+      box.textContent = errText;
+
+      return errText;
+    }
+
+    // ================= STREAM =================
+    const reader = res.body.getReader();
+
+    const decoder = new TextDecoder();
+
+    let result = "";
+    let buffer = "";
+
+    while (true) {
+
+      const { done, value } = await reader.read();
+
+      if (done) break;
+
+      buffer += decoder.decode(value);
+
+      if (buffer.length > 15) {
+
+        result += buffer;
+
+        box.textContent = result + "▌";
+
+        buffer = "";
+
+        playSound();
+
+        requestAnimationFrame(() => {
+          chatBox.scrollTop = chatBox.scrollHeight;
+        });
+      }
+    }
+
+    result += buffer;
+
+    box.textContent = result;
+
+    cache.set(key, result);
+
+    uploadedFile = null;
+
+    return result;
+
+  } catch (err) {
+
+    console.log("FETCH ERROR:", err);
+
+    box.textContent =
+      "Cannot connect to server";
+
+    return "Server offline";
+  }
+}
+
+// ================= SEND =================
+window.sendMessage = async function () {
+
+  const text = textInput.value.trim();
+
+  if (!text) return;
+
+  textInput.value = "";
+
+  updateProfile(text);
+
+  render("user", text);
+
+  const aiBox = render("ai", "Thinking...");
+
+  status.textContent = "Auralis thinking...";
+
+  try {
+
+    const reply = await askAI(text, aiBox);
+
+    await saveHistory(text, reply);
+
+    trackUsage();
+
+    speak(reply);
+
+  } catch (err) {
+
+    console.log(err);
+
+    aiBox.textContent = "Server error";
+
+  } finally {
+
+    status.textContent = "";
+  }
+};
+
+// ================= SAVE HISTORY =================
+async function saveHistory(user, ai) {
+
+  try {
+
+    if (!currentChatId) {
+      await createNewChat();
+    }
+
+    // Save in history collection
+    await addDoc(
+      collection(
+        db,
+        "users",
+        currentUser.uid,
+        "history"
+      ),
+      {
+        user,
+        ai,
+        createdAt: new Date()
+      }
+    );
+
+    // Save in chat messages
+    await addDoc(
+      collection(
+        db,
+        "users",
+        currentUser.uid,
+        "chats",
+        currentChatId,
+        "messages"
+      ),
+      {
+        user,
+        ai,
+        createdAt: new Date()
+      }
+    );
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// ================= CREATE CHAT =================
+window.createNewChat = async function () {
+
+  try {
+
+    const ref = await addDoc(
+      collection(
+        db,
+        "users",
+        currentUser.uid,
+        "chats"
+      ),
+      {
+        name: "New Chat",
+        createdAt: new Date()
+      }
+    );
+
+    currentChatId = ref.id;
+
+    chatBox.innerHTML = "";
+
+    await loadChats();
+
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+// ================= LOAD CHATS =================
+async function loadChats() {
+
+  historyList.innerHTML = "";
+
+  try {
+
+    const q = query(
+      collection(
+        db,
+        "users",
+        currentUser.uid,
+        "chats"
+      ),
+      orderBy("createdAt", "desc")
+    );
+
+    const snap = await getDocs(q);
+
+    snap.forEach(docSnap => {
+
+      const data = docSnap.data();
+
+      const div = document.createElement("div");
+
+      div.className = "chat-item";
+
+      div.innerHTML = `
+        <span>${data.name}</span>
+        <button onclick="openChat('${docSnap.id}')">
+          Open
+        </button>
+      `;
+
+      historyList.appendChild(div);
+    });
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+// ================= OPEN CHAT =================
+window.openChat = async function (id) {
+
+  currentChatId = id;
+
+  chatBox.innerHTML = "";
+
+  try {
+
+    const q = query(
+      collection(
+        db,
+        "users",
+        currentUser.uid,
+        "chats",
+        id,
+        "messages"
+      ),
+      orderBy("createdAt", "asc")
+    );
+
+    const snap = await getDocs(q);
+
+    snap.forEach(docSnap => {
+
+      const data = docSnap.data();
+
+      render("user", data.user);
+      render("ai", data.ai);
+
+    });
+
+    openTab("home");
+
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+// ================= ANALYTICS =================
+function trackUsage() {
+
+  const today = new Date().toDateString();
+
+  if (!dailyStats[today]) {
+    dailyStats[today] = 0;
+  }
+
+  dailyStats[today]++;
+
+  localStorage.setItem(
+    "stats",
+    JSON.stringify(dailyStats)
+  );
+}
+
+function loadAnalytics() {
+
+  if (!analyticsBox) return;
+
+  const stats = JSON.parse(
+    localStorage.getItem("stats") || "{}"
+  );
+
+  const labels = Object.keys(stats);
+
+  const values = Object.values(stats);
+
+  analyticsBox.innerHTML = `
+    <canvas id="chart"></canvas>
+  `;
+
+  setTimeout(() => {
+
+    const ctx = document
+      .getElementById("chart")
+      .getContext("2d");
+
+    new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Messages",
+            data: values
+          }
+        ]
+      },
+      options: {
+        responsive: true
+      }
+    });
+
+  }, 200);
+}
+
+// ================= VOICE MODE =================
+window.setVoice = function (mode) {
+
+  voiceMode = mode;
+
+  localStorage.setItem("voice", mode);
+};
+
+// ================= LOGOUT =================
+window.logout = async function () {
+
+  await signOut(auth);
+
+  window.location.href = "auth.html#login";
+};
+
+// ================= ENTER =================
+textInput.addEventListener("keydown", e => {
+
+  if (e.key === "Enter") {
+    sendMessage();
+  }
+});
+
+// ================= SERVICE WORKER =================
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((reg) => console.log("SW Registered", reg))
+      .catch((err) => console.log("SW Error", err));
   });
 }

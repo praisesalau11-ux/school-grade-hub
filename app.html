@@ -1,133 +1,183 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>School App</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Auralis AI</title>
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b0f1a">
+<script>
+if ("serviceWorker" in navigator) {
 
-<!-- Chart -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  window.addEventListener("load", () => {
 
-<script src="firebase.js"></script>
-<script src="classes.js"></script>
-<script src="juniorSubject.js"></script>
-<script src="seniorSubject.js"></script>
-
-<!-- GAME FILES -->
-<script src="maths.js"></script>
-<script src="english.js"></script>
-<script src="history.js"></script>
-<script src="subject.js"></script>
-<script src="general.js"></script>
-
-<style>
-body { font-family: Arial; background:#0f172a; color:white; padding:10px; }
-.page { display:none; }
-.page.active { display:block; }
-
-button {
-  width:100%;
-  padding:12px;
-  margin-top:8px;
-  border:none;
-  border-radius:8px;
-  background:#22c55e;
-  color:white;
+    navigator.serviceWorker
+      .register("./sw.js")
+      .then(() => {
+        console.log("SW registered");
+      })
+      .catch(err => {
+        console.log(err);
+      });
+  });
 }
+</script>
 
-.card {
-  background:#1e293b;
-  padding:12px;
-  margin-top:10px;
-  border-radius:10px;
-}
-
-input, select {
-  width:100%;
-  padding:10px;
-  margin-top:5px;
-  border-radius:6px;
-  border:none;
-}
-
-.bottom-nav {
-  position:fixed;
-  bottom:0;
-  width:100%;
-  display:flex;
-  background:#020617;
-}
-.bottom-nav button { flex:1; background:none; }
-</style>
+  <!-- Chart.js for analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
 
-<!-- GRADES -->
-<div id="gradesPage" class="page active">
-  <h2>📊 Grades Calculator</h2>
+<div class="app">
 
-  <select id="classSelect" onchange="loadSubjects()"></select>
+  <!-- HEADER -->
+  <div class="header">
+    <h1>Auralis AI</h1>
 
-  <div id="departmentBox" style="display:none;">
-    <select id="departmentSelect" onchange="loadSubjects()">
-      <option value="">Select Department</option>
-      <option>Science</option>
-      <option>Art</option>
-      <option>Commercial</option>
-    </select>
+    <p id="userInfo">Loading...</p>
+    <p id="planInfo">Plan: free</p>
+
+    <!-- dynamic upgrade UI -->
+    <div id="upgradeBox"></div>
   </div>
 
-  <div id="subjectsBox"></div>
+  <!-- ================= CHAT PAGE ================= -->
+  <div id="home" class="page">
 
-  <button onclick="calculateGrades()">Calculate</button>
+    <div class="card">
 
-  <div id="resultBox" class="card"></div>
-  <canvas id="chart"></canvas>
+      <!-- CHAT BOX -->
+      <div id="chatBox" class="chat-box"></div>
+
+      <p id="status"></p>
+
+      <!-- INPUT -->
+      <div class="input-bar">
+
+<!-- 🎤 Voice -->
+<button
+  class="mic-btn"
+  onmousedown="startHoldRecord()"
+  onmouseup="stopHoldRecord()"
+  title="Hold to speak">
+🎤
+</button>
+
+<!-- 📎 Upload file -->
+<button onclick="pickFile()">
+📎
+</button>
+
+<!-- 📷 Camera -->
+<button onclick="takePhoto()">
+📷
+</button>
+
+<input
+  type="file"
+  id="fileInput"
+  hidden
+  accept="image/*,.pdf,.txt"
+/>
+
+<input
+  id="textInput"
+  placeholder="Ask anything..."
+/>
+
+<button onclick="sendMessage()">
+➤
+</button>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= HISTORY ================= -->
+  <div id="history" class="page hidden">
+
+    <div class="card">
+      <h2>Chats</h2>
+
+      <button class="primary-btn" onclick="createNewChat()">➕ New Chat</button>
+
+      <div id="historyList"></div>
+    </div>
+
+  </div>
+
+  <!-- ================= ANALYTICS ================= -->
+  <div id="analytics" class="page hidden">
+
+    <div class="card">
+
+      <h2>📊 Analytics</h2>
+
+      <div id="analyticsBox">
+        <canvas id="usageChart"></canvas>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ================= SETTINGS ================= -->
+  <div id="settings" class="page hidden">
+
+    <div class="card">
+
+      <h2>Settings</h2>
+
+      <button onclick="logout()" class="danger-btn">Logout</button>
+
+      <button 
+        class="upgrade-btn"
+        onclick="window.open('https://paystack.shop/pay/j-1x5anvvc')">
+        💳 Upgrade to Pro
+      </button>
+
+    </div>
+
+  </div>
+
 </div>
 
-<!-- HISTORY -->
-<div id="historyPage" class="page">
-  <h2>📜 History</h2>
-  <div id="historyBox"></div>
+<!-- ================= BOTTOM NAV ================= -->
+<div class="nav">
+
+  <button onclick="openTab('home')">💬 Chat</button>
+
+  <button onclick="openTab('history')">📁 History</button>
+
+  <button onclick="openTab('analytics')">📊 Stats</button>
+
+  <button onclick="openTab('settings')">⚙️ Settings</button>
+
 </div>
 
-<!-- PROFILE -->
-<div id="profilePage" class="page">
-  <h2>👤 Profile</h2>
-  <div id="profileBox"></div>
-</div>
+<script>
 
-<!-- LEADERBOARD -->
-<div id="leaderboardPage" class="page">
-  <h2>🏆 Leaderboard</h2>
-  <div id="leaderboardBox"></div>
-</div>
+if ("serviceWorker" in navigator) {
 
-<!-- GAME -->
-<div id="gamePage" class="page">
-  <h2>🎮 Game</h2>
+  window.addEventListener("load", () => {
 
-  <button onclick="startGame()">Start Game</button>
+    navigator.serviceWorker
+      .register("./sw.js")
+      .then(reg => console.log("SW Registered"))
+      .catch(err => console.log(err));
 
-  <div id="gameBox" class="card"></div>
-  <p>Time: <span id="timer">20</span></p>
-</div>
+  });
 
-<!-- NAV -->
-<div class="bottom-nav">
-  <button onclick="goPage('gradesPage')">Grades</button>
-  <button onclick="goPage('historyPage')">History</button>
-  <button onclick="goPage('profilePage')">Profile</button>
-  <button onclick="goPage('leaderboardPage')">Leaderboard</button>
-  <button onclick="goPage('gamePage')">Game</button>
-</div>
+}
 
-<script src="app.js"></script>
+</script>
+
+<!-- ================= APP SCRIPT ================= -->
+<script type="module" src="app.js"></script>
+
 </body>
 </html>
